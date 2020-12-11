@@ -395,7 +395,7 @@ class UserDirectoryBackgroundUpdateStore(StateDeltasStore):
                             user_id,
                             get_localpart_from_id(user_id),
                             get_domain_from_id(user_id),
-                            display_name,
+                            display_name.replace("@" , "AT"),
                         ),
                     )
                 else:
@@ -417,7 +417,7 @@ class UserDirectoryBackgroundUpdateStore(StateDeltasStore):
                                 user_id,
                                 get_localpart_from_id(user_id),
                                 get_domain_from_id(user_id),
-                                display_name,
+                                display_name.replace("@" , "AT"),
                             ),
                         )
                     elif new_entry is False:
@@ -433,7 +433,7 @@ class UserDirectoryBackgroundUpdateStore(StateDeltasStore):
                             (
                                 get_localpart_from_id(user_id),
                                 get_domain_from_id(user_id),
-                                display_name,
+                                display_name.replace("@" , "AT"),
                                 user_id,
                             ),
                         )
@@ -442,7 +442,7 @@ class UserDirectoryBackgroundUpdateStore(StateDeltasStore):
                             "upsert returned None when 'can_native_upsert' is False"
                         )
             elif isinstance(self.database_engine, Sqlite3Engine):
-                value = "%s %s" % (user_id, display_name) if display_name else user_id
+                value = "%s %s" % (user_id, display_name.replace("@", "AT")) if display_name else user_id
                 self.db.simple_upsert_txn(
                     txn,
                     table="user_directory_search",
@@ -814,9 +814,10 @@ def _parse_query_sqlite(search_term):
     """
 
     # Pull out the individual words, discarding any non-word characters.
-    #results = re.findall(r"([\w\-]+)", search_term, re.UNICODE)
-    #return " & ".join("(%s* OR %s)" % (result, result) for result in results)
-    return "(%s* OR %s)" % ("(" + search_term + ")", "(" + result + ")")
+    result = re.findall(r"([\w\-\@\.]+)", search_term, re.UNICODE)[0]
+    if "@" in result and "." in result:
+        return '(%s)' % (result.replace("@", "AT"))
+    return "(%s)" % ("NO_VALID_EMAIL")
 
 
 def _parse_query_postgres(search_term):
@@ -827,10 +828,14 @@ def _parse_query_postgres(search_term):
     """
 
     # Pull out the individual words, discarding any non-word characters.
-    results = re.findall(r"([\w\-]+)", search_term, re.UNICODE)
+    result = re.findall(r"([\w\-\@\.]+)", search_term, re.UNICODE)[0]
+    if "@" in result and "."  in result:
+        result = result.replace("@", "AT")
+    else:
+        result = "NO_VALID_EMAIL"
 
-    both = " & ".join("(%s:* | %s)" % (result, result) for result in results)
-    exact = " & ".join("%s" % (result,) for result in results)
-    prefix = " & ".join("%s:*" % (result,) for result in results)
+    both = "(%s)" % (result)
+    exact = "%s" % (result)
+    prefix = "%s" % (result)
 
     return both, exact, prefix
